@@ -1,9 +1,14 @@
 package at.hazm.math;
 
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * derived from 1.5.1
+ *
+ * @see <a href="http://www.math.sci.hiroshima-u.ac.jp/~m-mat/MT/SFMT/"></a>
+ */
 public strictfp class SFMTRandom {
 
     private final SFMTParam param;
@@ -16,7 +21,7 @@ public strictfp class SFMTRandom {
     /**
      * index counter to the 32-bit internal state array
      */
-    private final AtomicInteger idx = new AtomicInteger();
+    private int idx = 0;
 
     public SFMTRandom(SFMTParam param) {
         this.param = param;
@@ -26,42 +31,37 @@ public strictfp class SFMTRandom {
         }
     }
 
-    private int psfmt32(int i){
+    private int psfmt32(int i) {
         return state[i / (W128T.BUFFER_SIZE / Integer.BYTES)].u(i % (W128T.BUFFER_SIZE / Integer.BYTES));
     }
 
-    private void psfmt32(int i, int value){
+    private void psfmt32(int i, int value) {
         state[i / (W128T.BUFFER_SIZE / Integer.BYTES)].u(i % (W128T.BUFFER_SIZE / Integer.BYTES), value);
     }
 
+    private long psfmt64(int i) {
+        return state[i / (W128T.BUFFER_SIZE / Long.BYTES)].u64(i % (W128T.BUFFER_SIZE / Long.BYTES));
+    }
+
     /**
-     * This function generates and returns 32-bit pseudorandom number.
+     * Generate and returns a 32-bit pseudorandom number.
      * init_gen_rand or init_by_array must be called before this function.
      *
      * @return 32-bit pseudorandom number
      * @apiNote inline static uint32_t sfmt_genrand_uint32(sfmt_t * sfmt)
      */
     public int nextInt() {
-        if (idx.get() >= param.SFMT_N32) {
+        if (idx >= param.SFMT_N32) {
             gen_rand_all();
-            idx.set(0);
+            idx = 0;
         }
-        return state[0].u(idx.getAndIncrement());
-        /*
-        uint32_t r;
-        uint32_t * psfmt32 = &sfmt->state[0].u[0];
-
-        if (sfmt->idx >= SFMT_N32) {
-            sfmt_gen_rand_all(sfmt);
-            sfmt->idx = 0;
-        }
-        r = psfmt32[sfmt->idx++];
+        int r = psfmt32(idx);
+        idx++;
         return r;
-        */
     }
 
     /**
-     * This function generates and returns 64-bit pseudorandom number.
+     * Generate and return a 64-bit pseudorandom number.
      * init_gen_rand or init_by_array must be called before this function.
      * The function gen_rand64 should not be called after gen_rand32,
      * unless an initialization is again executed.
@@ -70,38 +70,14 @@ public strictfp class SFMTRandom {
      * @apiNote inline static uint64_t sfmt_genrand_uint64(sfmt_t * sfmt)
      */
     public long nextLong() {
-        if (idx.get() >= param.SFMT_N64) {
+        assert idx % 2 == 0 : idx;
+        if (idx >= param.SFMT_N32) {
             gen_rand_all();
-            idx.set(0);
+            idx = 0;
         }
-        return state[0].u64(idx.getAndAdd(2) / 2);
-
-        /*
-#if defined(BIG_ENDIAN64) && !defined(ONLY64)
-        uint32_t * psfmt32 = &sfmt->state[0].u[0];
-        uint32_t r1, r2;
-#else
-        uint64_t r;
-#endif
-        uint64_t * psfmt64 = &sfmt->state[0].u64[0];
-        assert(sfmt->idx % 2 == 0);
-
-        if (sfmt->idx >= SFMT_N32) {
-            sfmt_gen_rand_all(sfmt);
-            sfmt->idx = 0;
-        }
-#if defined(BIG_ENDIAN64) && !defined(ONLY64)
-        r1 = psfmt32[sfmt->idx];
-        r2 = psfmt32[sfmt->idx + 1];
-        sfmt->idx += 2;
-        return ((uint64_t)r2 << 32) | r1;
-#else
-        r = psfmt64[sfmt->idx / 2];
-        sfmt->idx += 2;
+        long r = psfmt64(idx / 2);
+        idx += 2;
         return r;
-#endif
-     */
-
     }
 
 /* =================================================
@@ -109,15 +85,15 @@ public strictfp class SFMTRandom {
    ================================================= */
 
     /**
-     * converts an unsigned 32-bit number to a double on [0,1]-real-interval.
+     * converts a signed 32-bit number to a double on [0,1]-real-interval.
      *
-     * @param v 32-bit unsigned integer
+     * @param v 32-bit signed integer
      * @return double on [0,1]-real-interval
      * @apiNote inline static double sfmt_to_real1(uint32_t v)
      */
-    public double to_real1(int v) {
-        /* divided by 2^32-1 */
-        return v * (1.0 / 4294967295.0);
+    public static double to_real1(int v) {
+        // divided by 2^32-1
+        return ((long) v - Integer.MIN_VALUE) / (double) 0xFFFFFFFFL;
     }
 
     /**
@@ -131,15 +107,15 @@ public strictfp class SFMTRandom {
     }
 
     /**
-     * converts an unsigned 32-bit integer to a double on [0,1)-real-interval.
+     * converts a signed 32-bit integer to a double on [0,1)-real-interval.
      *
-     * @param v 32-bit unsigned integer
+     * @param v 32-bit signed integer
      * @return double on [0,1)-real-interval
      * @apiNote inline static double sfmt_to_real2(uint32_t v)
      */
     public static double to_real2(int v) {
-    /* divided by 2^32 */
-        return v * (1.0 / 4294967296.0);
+        // divided by 2^32
+        return ((long) v - Integer.MIN_VALUE) / (double) 0x100000000L;
     }
 
     /**
@@ -153,14 +129,14 @@ public strictfp class SFMTRandom {
     }
 
     /**
-     * converts an unsigned 32-bit integer to a double on (0,1)-real-interval.
+     * converts a signed 32-bit integer to a double on (0,1)-real-interval.
      *
-     * @param v 32-bit unsigned integer
+     * @param v 32-bit signed integer
      * @return double on (0,1)-real-interval
      */
     public static double to_real3(int v) {
-        /* divided by 2^32 */
-        return (((double) v) + 0.5) * (1.0 / 4294967296.0);
+        // divided by 2^32
+        return ((long) v - Integer.MIN_VALUE + 0.5) / (double) 0x100000000L;
     }
 
     /**
@@ -233,31 +209,12 @@ public strictfp class SFMTRandom {
      * @apiNote inline static void do_recursion(w128_t *r, w128_t *a, w128_t *b, w128_t *c,
      */
     private void do_recursion(W128T r, W128T a, W128T b, W128T c, W128T d) {
-        if(r == null || a == null || b == null || c == null || d == null){
-            throw new NullPointerException();
-        }
         W128T x = a.lshift128(param.SFMT_SL2);
         W128T y = c.rshift128(param.SFMT_SR2);
 
         for (int i = 0; i < 4; i++) {
-            r.u(i, a.u(i) ^ x.u(i) ^ ((b.u(i) >>> param.SFMT_SR1) & param.SFMT_MSK2) ^ y.u(i) ^ (d.u(i) << param.SFMT_SL1));
+            r.u(i, a.u(i) ^ (x.u(i) ^ (((b.u(i) >>> param.SFMT_SR1) & param.SFMT_MSK(i)) ^ (y.u(i) ^ (d.u(i) << param.SFMT_SL1)))));
         }
-
-        /*
-        w128_t x;
-        w128_t y;
-
-        lshift128(&x, a, SFMT_SL2);
-        rshift128(&y, c, SFMT_SR2);
-        r->u[0] = a->u[0] ^ x.u[0] ^ ((b->u[0] >> SFMT_SR1) & SFMT_MSK2) ^ y.u[0]
-                ^ (d->u[0] << SFMT_SL1);
-        r->u[1] = a->u[1] ^ x.u[1] ^ ((b->u[1] >> SFMT_SR1) & SFMT_MSK1) ^ y.u[1]
-                ^ (d->u[1] << SFMT_SL1);
-        r->u[2] = a->u[2] ^ x.u[2] ^ ((b->u[2] >> SFMT_SR1) & SFMT_MSK4) ^ y.u[2]
-                ^ (d->u[2] << SFMT_SL1);
-        r->u[3] = a->u[3] ^ x.u[3] ^ ((b->u[3] >> SFMT_SR1) & SFMT_MSK3) ^ y.u[3]
-                ^ (d->u[3] << SFMT_SL1);
-        */
     }
 
     /**
@@ -267,8 +224,7 @@ public strictfp class SFMTRandom {
      * @apiNote inline static int idxof(int i)
      */
     private static int idxof(int i) {
-        return i ^ 1;
-        //return i;
+        return i;
     }
 
     /**
@@ -303,10 +259,9 @@ public strictfp class SFMTRandom {
     private void period_certification() {
         int inner = 0;
         int work;
-        int[] parity = {param.SFMT_PARITY1, param.SFMT_PARITY2, param.SFMT_PARITY3, param.SFMT_PARITY4};
 
         for (int i = 0; i < 4; i++) {
-            inner ^= state[0].u(idxof(i)) & parity[i];
+            inner ^= state[0].u(idxof(i)) & param.SFMT_PARITY(i);
         }
         for (int i = 16; i > 0; i >>>= 1) {
             inner ^= inner >>> i;
@@ -320,7 +275,7 @@ public strictfp class SFMTRandom {
         for (int i = 0; i < 4; i++) {
             work = 1;
             for (int j = 0; j < 32; j++) {
-                if ((work & parity[i]) != 0) {
+                if ((work & param.SFMT_PARITY(i)) != 0) {
                     state[0].u_xor(idxof(i), work);
                     return;
                 }
@@ -459,13 +414,12 @@ public strictfp class SFMTRandom {
      * @apiNote void sfmt_fill_array32(sfmt_t * sfmt, uint32_t *array, int size)
      */
     public void fill_array32(int[] array) {
-        assert (idx.get() == param.SFMT_N32);
+        assert (idx == param.SFMT_N32);
         assert (array.length % 4 == 0);
         assert (array.length >= param.SFMT_N32);
 
-        // gen_rand_array((w128_t *)array, size / 4);
         W128T[] temp = new W128T[array.length / 4];
-        for(int i=0; i<temp.length; i++){
+        for (int i = 0; i < temp.length; i++) {
             temp[i] = new W128T();
         }
         gen_rand_array(temp);
@@ -475,7 +429,7 @@ public strictfp class SFMTRandom {
             array[i * 4 + 2] = temp[i].u(2);
             array[i * 4 + 3] = temp[i].u(3);
         }
-        idx.set(param.SFMT_N32);
+        idx = param.SFMT_N32;
     }
 
 
@@ -503,15 +457,13 @@ public strictfp class SFMTRandom {
      * returns the pointer to the aligned memory block.
      * @apiNote void sfmt_fill_array64(sfmt_t * sfmt, uint64_t *array, int size)
      */
-    private void fill_array64(long[] array) {
-        assert (idx.get() == param.SFMT_N32);
+    public void fill_array64(long[] array) {
+        assert (idx == param.SFMT_N32);
         assert (array.length % 2 == 0);
         assert (array.length >= param.SFMT_N64);
 
-
-        // gen_rand_array((w128_t *)array, size / 2);
         W128T[] temp = new W128T[array.length / 2];
-        for(int i=0; i<temp.length; i++){
+        for (int i = 0; i < temp.length; i++) {
             temp[i] = new W128T();
         }
         gen_rand_array(temp);
@@ -519,7 +471,7 @@ public strictfp class SFMTRandom {
             array[i * 2] = temp[i].u64(0);
             array[i * 2 + 1] = temp[i].u64(1);
         }
-        idx.set(param.SFMT_N32);
+        idx = param.SFMT_N32;
     }
 
     /**
@@ -558,40 +510,6 @@ public strictfp class SFMTRandom {
             r2 = array[i];
             state[j] = array[i];
         }
-        /*
-        int i, j;
-        w128_t *r1, *r2;
-
-        r1 = &sfmt->state[SFMT_N - 2];
-        r2 = &sfmt->state[SFMT_N - 1];
-        for (i = 0; i < SFMT_N - SFMT_POS1; i++) {
-            do_recursion(&array[i], &sfmt->state[i], &sfmt->state[i + SFMT_POS1], r1, r2);
-            r1 = r2;
-            r2 = &array[i];
-        }
-        for (; i < SFMT_N; i++) {
-            do_recursion(&array[i], &sfmt->state[i],
-                     &array[i + SFMT_POS1 - SFMT_N], r1, r2);
-            r1 = r2;
-            r2 = &array[i];
-        }
-        for (; i < size - SFMT_N; i++) {
-            do_recursion(&array[i], &array[i - SFMT_N],
-                     &array[i + SFMT_POS1 - SFMT_N], r1, r2);
-            r1 = r2;
-            r2 = &array[i];
-        }
-        for (j = 0; j < 2 * SFMT_N - size; j++) {
-            sfmt->state[j] = array[j + size - SFMT_N];
-        }
-        for (; i < size; i++, j++) {
-            do_recursion(&array[i], &array[i - SFMT_N],
-                     &array[i + SFMT_POS1 - SFMT_N], r1, r2);
-            r1 = r2;
-            r2 = &array[i];
-            sfmt->state[j] = array[i];
-        }
-        */
     }
 
 
@@ -605,29 +523,10 @@ public strictfp class SFMTRandom {
     public void init_gen_rand(int seed) {
         state[0].u(idxof(0), seed);
         for (int i = 1; i < param.SFMT_N32; i++) {
-            int x = i / (W128T.BUFFER_SIZE / Integer.BYTES);
-            int y = i % (W128T.BUFFER_SIZE / Integer.BYTES);
-            int py = (i - 1) % (W128T.BUFFER_SIZE / Integer.BYTES);
-            //psfmt32(i, 1812433253 * (psfmt32(idxof(i - 1)) ^ (psfmt32(idxof(i - 1)) >>> 30)) + i);
-            state[x].u(idxof(y), 1812433253 * (state[x].u(idxof(py)) ^ (state[x].u(idxof(py)) >>> 30)) + i);
+            psfmt32(i, 1812433253 * (psfmt32(idxof(i - 1)) ^ (psfmt32(idxof(i - 1)) >>> 30)) + i);
         }
-        idx.set(param.SFMT_N32);
+        idx = param.SFMT_N32;
         period_certification();
-        /*
-        int i;
-
-        uint32_t *psfmt32 = &sfmt->state[0].u[0];
-
-        psfmt32[idxof(0)] = seed;
-        for (i = 1; i < SFMT_N32; i++) {
-            psfmt32[idxof(i)] = 1812433253UL * (psfmt32[idxof(i - 1)]
-                    ^ (psfmt32[idxof(i - 1)] >> 30))
-                    + i;
-        }
-        sfmt->idx = SFMT_N32;
-        period_certification(sfmt);
-
-         */
     }
 
     /**
@@ -708,7 +607,7 @@ public strictfp class SFMTRandom {
             i = (i + 1) % param.SFMT_N32;
         }
 
-        idx.set(param.SFMT_N32);
+        idx = param.SFMT_N32;
         period_certification();
     }
 
@@ -717,39 +616,42 @@ public strictfp class SFMTRandom {
      * 128-bit data structure
      */
     public static class W128T {
-        static final int BUFFER_SIZE = 16;
+        static final int BUFFER_SIZE = 128 / 8;
         private ByteBuffer b = ByteBuffer.allocate(BUFFER_SIZE);
 
-        public W128T(){
+        W128T() {
             b.order(ByteOrder.BIG_ENDIAN);
         }
 
-        public int u(int i) {
-            return b.getInt(i);
-        }
-
-        public void u(int i, int value) {
+        int u(int i) {
             assert i < BUFFER_SIZE : i + ">=" + BUFFER_SIZE;
-            b.putInt(i, value);
+            return b.getInt(i * Integer.BYTES);
         }
 
-        public void u_add(int i, int increment) {
-            b.putInt(i, b.getInt(i) + increment);
+        void u(int i, int value) {
+            assert i < BUFFER_SIZE : i + ">=" + BUFFER_SIZE;
+            b.putInt(i * Integer.BYTES, value);
         }
 
-        public void u_xor(int i, int x) {
-            b.putInt(i, b.getInt(i) ^ x);
+        void u_add(int i, int increment) {
+            b.putInt(i * Integer.BYTES, b.getInt(i) + increment);
         }
 
-        public long u64(int i) {
-            return b.getLong(i);
+        void u_xor(int i, int x) {
+            b.putInt(i * Integer.BYTES, b.getInt(i) ^ x);
         }
 
-        public void u64(int i, int value) {
-            b.putLong(i, value);
+        long u64(int i) {
+            return (b.getInt(i * Long.BYTES) & 0xFFFFFFFFL) | ((b.getInt(i * Long.BYTES + Integer.BYTES) & 0xFFFFFFFFL) << 32);
         }
 
-        public void fill(byte bx) {
+        private BigInteger u64bi(int i) {
+            BigInteger bl = BigInteger.valueOf(b.getInt(i * Long.BYTES) & 0xFFFFFFFFL);
+            BigInteger bh = BigInteger.valueOf(b.getInt(i * Long.BYTES + Integer.BYTES) & 0xFFFFFFFFL);
+            return bh.shiftLeft(32).or(bl);
+        }
+
+        private void fill(byte bx) {
             for (int i = 0; i < BUFFER_SIZE; i++) {
                 b.put(i, bx);
             }
@@ -767,16 +669,16 @@ public strictfp class SFMTRandom {
             long th, tl, oh, ol;
             W128T out = new W128T();
 
-            th = ((long) this.u(2) << 32) | ((long) this.u(3));
-            tl = ((long) this.u(0) << 32) | ((long) this.u(1));
+            th = ((this.u(3) & 0xFFFFFFFFL) << 32) | (this.u(2) & 0xFFFFFFFFL);
+            tl = ((this.u(1) & 0xFFFFFFFFL) << 32) | (this.u(0) & 0xFFFFFFFFL);
 
             oh = th << (shift * 8);
             ol = tl << (shift * 8);
             oh |= tl >>> (64 - shift * 8);
-            out.u(0, (int) (ol >>> 32));
-            out.u(1, (int) ol);
-            out.u(2, (int) (oh >>> 32));
-            out.u(3, (int) oh);
+            out.u(1, (int) (ol >>> 32));
+            out.u(0, (int) ol);
+            out.u(3, (int) (oh >>> 32));
+            out.u(2, (int) oh);
             return out;
         }
 
@@ -792,17 +694,23 @@ public strictfp class SFMTRandom {
             long th, tl, oh, ol;
             W128T out = new W128T();
 
-            th = ((long) this.u(2) << 32) | ((long) this.u(3));
-            tl = ((long) this.u(0) << 32) | ((long) this.u(1));
+            th = ((this.u(3) & 0xFFFFFFFFL) << 32) | ((this.u(2) & 0xFFFFFFFFL));
+            tl = ((this.u(1) & 0xFFFFFFFFL) << 32) | ((this.u(0) & 0xFFFFFFFFL));
 
             oh = th >>> (shift * 8);
             ol = tl >>> (shift * 8);
             ol |= th << (64 - shift * 8);
-            out.u(0, (int) (ol >>> 32));
-            out.u(1, (int) ol);
-            out.u(2, (int) (oh >>> 32));
-            out.u(3, (int) oh);
+            out.u(1, (int) (ol >>> 32));
+            out.u(0, (int) ol);
+            out.u(3, (int) (oh >>> 32));
+            out.u(2, (int) oh);
             return out;
+        }
+
+        public String toString() {
+            return String.format("u={%d, %d,  %d, %d}, u64={%s, %s}",
+                    u(0) & 0xFFFFFFFFL, u(1) & 0xFFFFFFFFL, u(2) & 0xFFFFFFFFL, u(3) & 0xFFFFFFFFL,
+                    u64bi(0), u64bi(1));
         }
 
     }
