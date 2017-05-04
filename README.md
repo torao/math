@@ -25,7 +25,8 @@ SFMT is a Linear Feedbacked Shift Register (LFSR) pseudo-random number generator
 [http://www.math.sci.hiroshima-u.ac.jp/~m-mat/MT/SFMT/index.html](http://www.math.sci.hiroshima-u.ac.jp/~m-mat/MT/SFMT/index.html)
 for detail.
 
-[SFMTRandom](src/main/java/at/hazm/math/SFMTRandom.java) is a Java porting of its C implementation.
+[SFMTRandom](src/main/java/at/hazm/math/SFMTRandom.java) is a SFMT-based random number generator available as in
+standard `java.util.Random` and ported from C implementation with compatibility test.
 
 ```java
 import at.hazm.math.SFMTRandom;
