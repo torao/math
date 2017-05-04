@@ -2,12 +2,12 @@
 
 ## Getting Started
 
-| Item             | Spec                                   |
-|:-----------------|:---------------------------------------|
-| Requirements     | Java 8 (to use), Scala 2.12 (to build) |
-| Current Version  | 1.0.0                                  |
-| Repository       | https://torao.github.io/math/repo      |
-| ID               | at.hazm:hazmat-math:1.0.0              |
+| Item             | Spec                                          |
+|:-----------------|:----------------------------------------------|
+| Requirements     | Java 8 (to use), sbt 0.13 (to build and test) |
+| Current Version  | 1.0.0 (test completed)                        |
+| Repository       | https://torao.github.io/math/repo             |
+| ID               | at.hazm:hazmat-math:1.0.0                     |
 
 For example to use in `build.sbt`.
 
