@@ -10,8 +10,9 @@ import java.nio.ByteOrder;
  * <p>SFMT is a Linear Feedbacked Shift Register (LFSR) pseudo-random number generator and improved algorithm of
  * conventional MT (Mersenne Twister) in speed and equidistributions. Like MT, the SFMT supports extremely long periods
  * from 2<sup>607</sup>-1 to 2<sup>216091</sup>-1.</p>
- * <p>NOTE that this implementation doesn't support the native SIMD features such as SEE2 because, same as Standard C
+ * <p>NOTE: This implementation doesn't support the native SIMD features such as SEE2 because, same as Standard C
  * version of original source, this is written pure Java.</p>
+ * <p>NOTE: Thread unsafe.</p>
  * <p>
  * The original SFMT sources are written in C by Makoto Matsumoto and Takuji Nishimura in 2007 and their license is here:
  * </p>
@@ -25,7 +26,7 @@ import java.nio.ByteOrder;
  * disclaimer.</li>
  * <li>Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the
  * following disclaimer in the documentation and/or other materials provided with the distribution.</li>
- * <li></li>Neither the names of Hiroshima University, The University of Tokyo nor the names of its contributors may be
+ * <li>Neither the names of Hiroshima University, The University of Tokyo nor the names of its contributors may be
  * used to endorse or promote products derived from this software without specific prior written permission.</li>
  * </ul>
  * <p>
@@ -144,7 +145,7 @@ public strictfp class SFMTRandom {
      * Generate and return a 32 bit pseudo-random integer.
      *
      * @return 32 bit pseudo-random integer
-     * @apiNote inline static uint32_t sfmt_genrand_uint32(sfmt_t * sfmt)
+     * @since inline static uint32_t sfmt_genrand_uint32(sfmt_t * sfmt)
      */
     public int nextInt() {
         if (idx >= param.SFMT_N32) {
@@ -160,7 +161,7 @@ public strictfp class SFMTRandom {
      * Generate and return a 64 bit pseudo-random integer.
      *
      * @return 64 bit pseudo-random integer
-     * @apiNote inline static uint64_t sfmt_genrand_uint64(sfmt_t * sfmt)
+     * @since inline static uint64_t sfmt_genrand_uint64(sfmt_t * sfmt)
      */
     public long nextLong() {
         if (idx % 2 == 0) {
@@ -179,7 +180,7 @@ public strictfp class SFMTRandom {
      * Generate and return a pseudo-random double-precision real in [0,1).
      *
      * @return double-precision pseudo-random real
-     * @apiNote inline static double sfmt_to_real2(sfmt_t * sfmt)
+     * @since inline static double sfmt_to_real2(sfmt_t * sfmt)
      */
     public double nextDouble() {
         long value = nextInt();
@@ -194,7 +195,7 @@ public strictfp class SFMTRandom {
      * @param b a 128-bit part of the internal state array
      * @param c a 128-bit part of the internal state array
      * @param d a 128-bit part of the internal state array
-     * @apiNote inline static void doRecursion(w128_t *r, w128_t *a, w128_t *b, w128_t *c,
+     * @since inline static void doRecursion(w128_t *r, w128_t *a, w128_t *b, w128_t *c,
      */
     private void doRecursion(W128T r, W128T a, W128T b, W128T c, W128T d) {
         W128T x = a.lshift128(param.SFMT_SL2);
@@ -208,7 +209,7 @@ public strictfp class SFMTRandom {
     /**
      * This function simulate a 64-bit index of LITTLE ENDIAN in BIG ENDIAN machine.
      *
-     * @apiNote inline static int idxof(int i)
+     * @since inline static int idxof(int i)
      */
     private static int idxof(int i) {
         return i;
@@ -219,7 +220,7 @@ public strictfp class SFMTRandom {
      *
      * @param x 32-bit integer
      * @return 32-bit integer
-     * @apiNote static uint32_t func1(uint32_t x)
+     * @since static uint32_t func1(uint32_t x)
      */
     private static int func1(int x) {
         return (x ^ (x >>> 27)) * (int) 1664525L;
@@ -230,7 +231,7 @@ public strictfp class SFMTRandom {
      *
      * @param x 32-bit integer
      * @return 32-bit integer
-     * @apiNote static uint32_t func2(uint32_t x)
+     * @since static uint32_t func2(uint32_t x)
      */
     private static int func2(int x) {
         return (x ^ (x >>> 27)) * (int) 1566083941L;
@@ -239,7 +240,7 @@ public strictfp class SFMTRandom {
     /**
      * This function certificate the period of 2^{MEXP}
      *
-     * @apiNote static void periodCertification(sfmt_t * sfmt)
+     * @since static void periodCertification(sfmt_t * sfmt)
      */
     private void periodCertification() {
         int inner = 0;
@@ -274,7 +275,7 @@ public strictfp class SFMTRandom {
      * exponent, and all parameters of this generator.
      *
      * @return {@link SFMTParam#SFMT_IDSTR}
-     * @apiNote const char *sfmt_get_idstring(sfmt_t * sfmt)
+     * @since const char *sfmt_get_idstring(sfmt_t * sfmt)
      */
     public String getId() {
         return param.SFMT_IDSTR;
@@ -283,7 +284,7 @@ public strictfp class SFMTRandom {
     /**
      * This function fills the internal state array with pseudo-random integers.
      *
-     * @apiNote void sfmt_gen_rand_all(sfmt_t * sfmt)
+     * @since void sfmt_gen_rand_all(sfmt_t * sfmt)
      */
     private void fillStateToRandom() {
         W128T r1 = state[param.SFMT_N - 2];
@@ -312,7 +313,7 @@ public strictfp class SFMTRandom {
      * @param array a return buffer where pseudo-random 32bit integers are filled.
      * @return the specified array
      * @throws IllegalStateException in case this function is used after calling nextInt() or nextLong()
-     * @apiNote void sfmt_fill_array32(sfmt_t * sfmt, uint32_t *array, int size)
+     * @since void sfmt_fill_array32(sfmt_t * sfmt, uint32_t *array, int size)
      */
     public int[] newRandomInt(int[] array) throws IllegalStateException, IllegalArgumentException {
         if (idx != param.SFMT_N32) {
@@ -352,7 +353,7 @@ public strictfp class SFMTRandom {
      * @param array a return buffer where presudo-random 64bit integers are filled.
      * @return the specified array
      * @throws IllegalStateException in case this function is used after calling nextInt() or nextLong()
-     * @apiNote void sfmt_fill_array64(sfmt_t * sfmt, uint64_t *array, int size)
+     * @since void sfmt_fill_array64(sfmt_t * sfmt, uint64_t *array, int size)
      */
     public long[] newRandomLong(long[] array) {
         if (idx != param.SFMT_N32) {
@@ -385,7 +386,7 @@ public strictfp class SFMTRandom {
      * This function fills the user-specified array with pseudo-random integers.
      *
      * @param array an 128bit array to be filled by pseudo-random numbers.
-     * @apiNote inline static void newRandomW128T(sfmt_t * sfmt, w128_t *array, int size)
+     * @since inline static void newRandomW128T(sfmt_t * sfmt, w128_t *array, int size)
      */
     private void newRandomW128T(W128T[] array) {
         W128T r1 = state[param.SFMT_N - 2];
@@ -424,7 +425,7 @@ public strictfp class SFMTRandom {
      * Initialize internal random state with specified 32bit integer seed.
      *
      * @param seed a 32-bit integer used as the seed.
-     * @apiNote void sfmt_init_gen_rand(sfmt_t * sfmt, uint32_t seed)
+     * @since void sfmt_init_gen_rand(sfmt_t * sfmt, uint32_t seed)
      */
     public void setSeed(int seed) {
         state[0].u(idxof(0), seed);
@@ -439,7 +440,7 @@ public strictfp class SFMTRandom {
      * Initialize internal random state with speicified 32bit integer array seed.
      *
      * @param seed an array of 32bit integers as seed
-     * @apiNote void sfmt_init_by_array(sfmt_t * sfmt, uint32_t *init_key, int key_length)
+     * @since void sfmt_init_by_array(sfmt_t * sfmt, uint32_t *init_key, int key_length)
      */
     public void setSeed(int... seed) {
         int size = param.SFMT_N * 4;
@@ -561,7 +562,7 @@ public strictfp class SFMTRandom {
          * This function simulates the LITTLE ENDIAN SIMD.
          *
          * @param shift the shift value
-         * @apiNote inline static void lshift128(w128_t *out, w128_t const *in, int shift) {
+         * @since inline static void lshift128(w128_t *out, w128_t const *in, int shift) {
          */
         W128T lshift128(int shift) {
             W128T out = new W128T();
@@ -585,7 +586,7 @@ public strictfp class SFMTRandom {
          * This function simulates the LITTLE ENDIAN SIMD.
          *
          * @param shift the shift value
-         * @apiNote inline static void rshift128(w128_t *out, w128_t const *in, int shift)
+         * @since inline static void rshift128(w128_t *out, w128_t const *in, int shift)
          */
         W128T rshift128(int shift) {
             long th, tl, oh, ol;
