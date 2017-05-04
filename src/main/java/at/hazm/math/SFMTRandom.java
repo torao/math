@@ -31,6 +31,16 @@ public strictfp class SFMTRandom {
         }
     }
 
+    public SFMTRandom(SFMTParam param, int seed) {
+        this(param);
+        setSeed(seed);
+    }
+
+    public SFMTRandom(SFMTParam param, int[] seed) {
+        this(param);
+        init_by_array(seed);
+    }
+
     private int psfmt32(int i) {
         return state[i / (W128T.BUFFER_SIZE / Integer.BYTES)].u(i % (W128T.BUFFER_SIZE / Integer.BYTES));
     }
@@ -39,13 +49,21 @@ public strictfp class SFMTRandom {
         state[i / (W128T.BUFFER_SIZE / Integer.BYTES)].u(i % (W128T.BUFFER_SIZE / Integer.BYTES), value);
     }
 
+    private void psfmt32_add(int i, int value) {
+        state[i / (W128T.BUFFER_SIZE / Integer.BYTES)].u_add(i % (W128T.BUFFER_SIZE / Integer.BYTES), value);
+    }
+
+    private void psfmt32_xor(int i, int value) {
+        state[i / (W128T.BUFFER_SIZE / Integer.BYTES)].u_xor(i % (W128T.BUFFER_SIZE / Integer.BYTES), value);
+    }
+
     private long psfmt64(int i) {
         return state[i / (W128T.BUFFER_SIZE / Long.BYTES)].u64(i % (W128T.BUFFER_SIZE / Long.BYTES));
     }
 
     /**
      * Generate and returns a 32-bit pseudorandom number.
-     * init_gen_rand or init_by_array must be called before this function.
+     * setSeed or init_by_array must be called before this function.
      *
      * @return 32-bit pseudorandom number
      * @apiNote inline static uint32_t sfmt_genrand_uint32(sfmt_t * sfmt)
@@ -62,7 +80,7 @@ public strictfp class SFMTRandom {
 
     /**
      * Generate and return a 64-bit pseudorandom number.
-     * init_gen_rand or init_by_array must be called before this function.
+     * setSeed or init_by_array must be called before this function.
      * The function gen_rand64 should not be called after gen_rand32,
      * unless an initialization is again executed.
      *
@@ -396,7 +414,7 @@ public strictfp class SFMTRandom {
      * multiple of four.  The generation by this function is much faster
      * than the following gen_rand function.
      * <p>
-     * For initialization, init_gen_rand or init_by_array must be called
+     * For initialization, setSeed or init_by_array must be called
      * before the first call of this function. This function can not be
      * used after calling gen_rand function, without initialization.
      *
@@ -440,7 +458,7 @@ public strictfp class SFMTRandom {
      * multiple of two.  The generation by this function is much faster
      * than the following gen_rand function.
      * <p>
-     * For initialization, init_gen_rand or init_by_array must be called
+     * For initialization, setSeed or init_by_array must be called
      * before the first call of this function. This function can not be
      * used after calling gen_rand function, without initialization.
      *
@@ -520,7 +538,7 @@ public strictfp class SFMTRandom {
      * @param seed a 32-bit integer used as the seed.
      * @apiNote void sfmt_init_gen_rand(sfmt_t * sfmt, uint32_t seed)
      */
-    public void init_gen_rand(int seed) {
+    public void setSeed(int seed) {
         state[0].u(idxof(0), seed);
         for (int i = 1; i < param.SFMT_N32; i++) {
             psfmt32(i, 1812433253 * (psfmt32(idxof(i - 1)) ^ (psfmt32(idxof(i - 1)) >>> 30)) + i);
@@ -537,13 +555,12 @@ public strictfp class SFMTRandom {
      * @param key_length the length of init_key.
      * @apiNote void sfmt_init_by_array(sfmt_t * sfmt, uint32_t *init_key, int key_length)
      */
-    public void init_by_array(int[] init_key, int key_length) {
+    public void init_by_array(int... init_key) {
         int count;
         int r;
         int lag;
         int mid;
         int size = param.SFMT_N * 4;
-        W128T psfmt32 = state[0];
 
         if (size >= 623) {
             lag = 11;
@@ -565,45 +582,45 @@ public strictfp class SFMTRandom {
             aState.fill((byte) 0x8b);
         }
 
-        if (key_length + 1 > param.SFMT_N32) {
-            count = key_length + 1;
+        if (init_key.length + 1 > param.SFMT_N32) {
+            count = init_key.length + 1;
         } else {
             count = param.SFMT_N32;
         }
-        r = func1(psfmt32.u(idxof(0)) ^ psfmt32.u(idxof(mid)) ^ psfmt32.u(idxof(param.SFMT_N32 - 1)));
-        psfmt32.u_add(idxof(mid), r);
-        r += key_length;
-        psfmt32.u_add(idxof(mid + lag), r);
-        psfmt32.u(idxof(0), r);
+        r = func1(psfmt32(idxof(0)) ^ psfmt32(idxof(mid)) ^ psfmt32(idxof(param.SFMT_N32 - 1)));
+        psfmt32_add(idxof(mid), r);
+        r += init_key.length;
+        psfmt32_add(idxof(mid + lag), r);
+        psfmt32(idxof(0), r);
 
-        int j = 0;
         int i = 1;
+        int j = 0;
         count--;
-        for (; (j < count) && (j < key_length); j++) {
-            r = func1(psfmt32.u(idxof(i)) ^ psfmt32.u(idxof((i + mid) % param.SFMT_N32))
-                    ^ psfmt32.u(idxof((i + param.SFMT_N32 - 1) % param.SFMT_N32)));
-            psfmt32.u_add(idxof((i + mid) % param.SFMT_N32), r);
+        for (; (j < count) && (j < init_key.length); j++) {
+            r = func1(psfmt32(idxof(i)) ^ psfmt32(idxof((i + mid) % param.SFMT_N32))
+                    ^ psfmt32(idxof((i + param.SFMT_N32 - 1) % param.SFMT_N32)));
+            psfmt32_add(idxof((i + mid) % param.SFMT_N32), r);
             r += init_key[j] + i;
-            psfmt32.u_add(idxof((i + mid + lag) % param.SFMT_N32), r);
-            psfmt32.u(idxof(i), r);
+            psfmt32_add(idxof((i + mid + lag) % param.SFMT_N32), r);
+            psfmt32(idxof(i), r);
             i = (i + 1) % param.SFMT_N32;
         }
         for (; j < count; j++) {
-            r = func1(psfmt32.u(idxof(i)) ^ psfmt32.u(idxof((i + mid) % param.SFMT_N32))
-                    ^ psfmt32.u(idxof((i + param.SFMT_N32 - 1) % param.SFMT_N32)));
-            psfmt32.u_add(idxof((i + mid) % param.SFMT_N32), r);
+            r = func1(psfmt32(idxof(i)) ^ psfmt32(idxof((i + mid) % param.SFMT_N32))
+                    ^ psfmt32(idxof((i + param.SFMT_N32 - 1) % param.SFMT_N32)));
+            psfmt32_add(idxof((i + mid) % param.SFMT_N32), r);
             r += i;
-            psfmt32.u_add(idxof((i + mid + lag) % param.SFMT_N32), r);
-            psfmt32.u(idxof(i), r);
+            psfmt32_add(idxof((i + mid + lag) % param.SFMT_N32), r);
+            psfmt32(idxof(i), r);
             i = (i + 1) % param.SFMT_N32;
         }
         for (j = 0; j < param.SFMT_N32; j++) {
-            r = func2(psfmt32.u(idxof(i)) + psfmt32.u(idxof((i + mid) % param.SFMT_N32))
-                    + psfmt32.u(idxof((i + param.SFMT_N32 - 1) % param.SFMT_N32)));
-            psfmt32.u_xor(idxof((i + mid) % param.SFMT_N32), r);
+            r = func2(psfmt32(idxof(i)) + psfmt32(idxof((i + mid) % param.SFMT_N32))
+                    + psfmt32(idxof((i + param.SFMT_N32 - 1) % param.SFMT_N32)));
+            psfmt32_xor(idxof((i + mid) % param.SFMT_N32), r);
             r -= i;
-            psfmt32.u_xor(idxof((i + mid + lag) % param.SFMT_N32), r);
-            psfmt32.u(idxof(i), r);
+            psfmt32_xor(idxof((i + mid + lag) % param.SFMT_N32), r);
+            psfmt32(idxof(i), r);
             i = (i + 1) % param.SFMT_N32;
         }
 
@@ -634,11 +651,11 @@ public strictfp class SFMTRandom {
         }
 
         void u_add(int i, int increment) {
-            b.putInt(i * Integer.BYTES, b.getInt(i) + increment);
+            b.putInt(i * Integer.BYTES, b.getInt(i * Integer.BYTES) + increment);
         }
 
         void u_xor(int i, int x) {
-            b.putInt(i * Integer.BYTES, b.getInt(i) ^ x);
+            b.putInt(i * Integer.BYTES, b.getInt(i * Integer.BYTES) ^ x);
         }
 
         long u64(int i) {

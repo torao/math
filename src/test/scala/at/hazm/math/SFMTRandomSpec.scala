@@ -11,6 +11,7 @@ class SFMTRandomSpec extends Specification {
        |generate 64bit random array     $e2
        |integer random to double        $e3
        |generate same random by next    $e4
+       |init seed by array              $e5
       """.stripMargin
 
   def ex = {
@@ -33,10 +34,10 @@ class SFMTRandomSpec extends Specification {
     println("32 bit generated randoms")
     println("init_gen_rand__________")
     /* 32 bit generation */
-    sfmt.init_gen_rand(1234)
+    sfmt.setSeed(1234)
     sfmt.fill_array32(array32)
     sfmt.fill_array32(array32_2)
-    sfmt.init_gen_rand(1234)
+    sfmt.setSeed(1234)
     for(i <- 0 until 10000) {
       if(i < 1000) {
         print(f"${array32(i).toLong & 0xFFFFFFFFL}%10d ")
@@ -50,9 +51,9 @@ class SFMTRandomSpec extends Specification {
 
   def e0 = {
     val random = new SFMTRandom(SFMTParam.P19937)
-    random.init_gen_rand(0)
+    random.setSeed(0)
     random.nextInt()
-    random.init_gen_rand(0)
+    random.setSeed(0)
     random.nextLong()
     success
   }
@@ -70,7 +71,7 @@ class SFMTRandomSpec extends Specification {
     ).flatMap { case (seed, expected) =>
       val random = new SFMTRandom(SFMTParam.P19937)
       val actual = new Array[Int](random.get_min_array_size32())
-      random.init_gen_rand(seed)
+      random.setSeed(seed)
       random.fill_array32(actual)
       expected.zip(actual).zipWithIndex.map { case ((a, b), i) => s"$i:${a.toInt}" === s"$i:$b" }
     }.reduceLeft(_ and _)
@@ -101,7 +102,7 @@ class SFMTRandomSpec extends Specification {
     ).flatMap { case (seed, expected) =>
       val random = new SFMTRandom(SFMTParam.P19937)
       val actual = new Array[Long](random.get_min_array_size64())
-      random.init_gen_rand(seed)
+      random.setSeed(seed)
       random.fill_array64(actual)
       expected.zip(actual).zipWithIndex.map { case ((a, b), i) => s"$i:${a.toLong}" === s"$i:$b" }
     }.reduceLeft(_ and _)
@@ -125,29 +126,58 @@ class SFMTRandomSpec extends Specification {
   def e4 = {
     val random1 = new SFMTRandom(SFMTParam.P19937)
     val random2 = new SFMTRandom(SFMTParam.P19937)
-    Seq(Int.MinValue, 0, Int.MaxValue, 1234).flatMap{ seed =>
-      {
-        val expected = new Array[Int](random1.get_min_array_size32())
-        random1.init_gen_rand(seed)
-        random2.init_gen_rand(seed)
-        (1 to 10).flatMap{ _ =>
-          random1.fill_array32(expected)
-          expected.map{ e =>
-            e === random2.nextInt()
-          }
-        }
-      } ++ {
-        val expected = new Array[Long](random1.get_min_array_size64())
-        random1.init_gen_rand(seed)
-        random2.init_gen_rand(seed)
-        (1 to 10).flatMap{ i =>
-          random1.fill_array64(expected)
-          expected.map{ e =>
-            s"$seed:$i:$e" === s"$seed:$i:${random2.nextLong()}"
-          }
+    Seq(Int.MinValue, 0, Int.MaxValue, 1234).flatMap { seed => {
+      val expected = new Array[Int](random1.get_min_array_size32())
+      random1.setSeed(seed)
+      random2.setSeed(seed)
+      (1 to 10).flatMap { _ =>
+        random1.fill_array32(expected)
+        expected.map { e =>
+          e === random2.nextInt()
         }
       }
+    } ++ {
+      val expected = new Array[Long](random1.get_min_array_size64())
+      random1.setSeed(seed)
+      random2.setSeed(seed)
+      (1 to 10).flatMap { i =>
+        random1.fill_array64(expected)
+        expected.map { e =>
+          s"$seed:$i:$e" === s"$seed:$i:${random2.nextLong()}"
+        }
+      }
+    }
     }.reduceLeft(_ and _)
   }
+
+  def e5 = Seq(
+    Array(0x01234567, 0x89ABCDEF, 0xFEDCBA98, 0x76543210) -> Seq(
+      32 -> Seq(BigInt("1160643868"), BigInt("3351191604"),
+        BigInt("737920565"), BigInt("1867384258"),
+        BigInt("499457216"), BigInt("1933799341"),
+        BigInt("654633548"), BigInt("3729240182"),
+        BigInt("1763910676"), BigInt("1638762436")),
+      64 -> Seq(BigInt("14393258342970426652"), BigInt("8020354317913146933"),
+        BigInt("8305604927120809152"), BigInt("16016964621273721420"),
+        BigInt("7038431070297203732"), BigInt("13341067070230834908"),
+        BigInt("11816532376596585295"), BigInt("6446174727031157984"),
+        BigInt("17552822845244345982"), BigInt("3860792366144420890"))
+    )
+  ).flatMap { case (seed, tests) =>
+    tests.flatMap { case (bit, expected) =>
+      val random = new SFMTRandom(SFMTParam.P19937)
+      random.init_by_array(seed:_*)
+      val actual = if(bit == 32){
+        val actual = new Array[Int](random.get_min_array_size32())
+        random.fill_array32(actual)
+        actual.map(_ & 0xFFFFFFFFL).map(i => BigInt(i))
+      } else {
+        val actual = new Array[Long](random.get_min_array_size64())
+        random.fill_array64(actual)
+        actual.map(i => BigInt(i))
+      }
+      expected.zip(actual).map { case (a, b) => a.toLong === b.toLong }
+    }
+  }.reduceLeft(_ and _)
 
 }
