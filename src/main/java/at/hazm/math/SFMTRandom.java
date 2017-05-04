@@ -1,8 +1,6 @@
 package at.hazm.math;
 
 import java.math.BigInteger;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 
 /**
  * This class is a Java implementation of pseudo-random number generator using <b>SFMT</b> (SIMD-oriented Fast Mersenne
@@ -73,10 +71,7 @@ public strictfp class SFMTRandom {
      */
     public SFMTRandom(SFMTParam param) {
         this.param = param;
-        this.state = new W128T[param.SFMT_N];
-        for (int i = 0; i < this.state.length; i++) {
-            this.state[i] = new W128T();
-        }
+        this.state = initBuffer(param.SFMT_N);
         long tm = System.currentTimeMillis();
         setSeed((int) (tm << Integer.SIZE), (int) tm);
     }
@@ -88,7 +83,8 @@ public strictfp class SFMTRandom {
      * @param seed  seed
      */
     public SFMTRandom(SFMTParam param, int seed) {
-        this(param);
+        this.param = param;
+        this.state = initBuffer(param.SFMT_N);
         setSeed(seed);
     }
 
@@ -99,7 +95,8 @@ public strictfp class SFMTRandom {
      * @param seed  seed
      */
     public SFMTRandom(SFMTParam param, int... seed) {
-        this(param);
+        this.param = param;
+        this.state = initBuffer(param.SFMT_N);
         setSeed(seed);
     }
 
@@ -119,6 +116,19 @@ public strictfp class SFMTRandom {
      */
     public SFMTRandom(int... seed) {
         this(SFMTParam.P19937, seed);
+    }
+
+    /**
+     * Construct internal state buffer.
+     *
+     * @param size buffer size
+     */
+    private static W128T[] initBuffer(int size) {
+        W128T[] state = new W128T[size];
+        for (int i = 0; i < state.length; i++) {
+            state[i] = new W128T();
+        }
+        return state;
     }
 
     private int getInt(int i) {
@@ -514,45 +524,48 @@ public strictfp class SFMTRandom {
     /**
      * 128-bit data structure
      */
-    public static class W128T {
+    private static final class W128T {
         static final int BUFFER_SIZE = 128 / 8;
-        private ByteBuffer b = ByteBuffer.allocate(BUFFER_SIZE);
+        private final int[] b = new int[BUFFER_SIZE / Integer.BYTES];
 
         W128T() {
-            b.order(ByteOrder.BIG_ENDIAN);
         }
 
         int u(int i) {
             assert i < BUFFER_SIZE : i + ">=" + BUFFER_SIZE;
-            return b.getInt(i * Integer.BYTES);
+            return b[i];
         }
 
         void u(int i, int value) {
             assert i < BUFFER_SIZE : i + ">=" + BUFFER_SIZE;
-            b.putInt(i * Integer.BYTES, value);
+            b[i] = value;
         }
 
         void u_add(int i, int increment) {
-            b.putInt(i * Integer.BYTES, b.getInt(i * Integer.BYTES) + increment);
+            b[i] += increment;
         }
 
         void u_xor(int i, int x) {
-            b.putInt(i * Integer.BYTES, b.getInt(i * Integer.BYTES) ^ x);
+            b[i] ^= x;
         }
 
         long u64(int i) {
-            return (b.getInt(i * Long.BYTES) & 0xFFFFFFFFL) | ((b.getInt(i * Long.BYTES + Integer.BYTES) & 0xFFFFFFFFL) << 32);
+            return (b[i * 2] & 0xFFFFFFFFL) | ((b[i * 2 + 1] & 0xFFFFFFFFL) << 32);
         }
 
         private BigInteger u64bi(int i) {
-            BigInteger bl = BigInteger.valueOf(b.getInt(i * Long.BYTES) & 0xFFFFFFFFL);
-            BigInteger bh = BigInteger.valueOf(b.getInt(i * Long.BYTES + Integer.BYTES) & 0xFFFFFFFFL);
+            BigInteger bl = BigInteger.valueOf(b[i * 2] & 0xFFFFFFFFL);
+            BigInteger bh = BigInteger.valueOf(b[i * 2 + 1] & 0xFFFFFFFFL);
             return bh.shiftLeft(32).or(bl);
         }
 
         private void fill(byte bx) {
-            for (int i = 0; i < BUFFER_SIZE; i++) {
-                b.put(i, bx);
+            int value = 0;
+            for (int i = 0; i < Integer.BYTES; i++) {
+                value |= (bx & 0xFF) << (i * 8);
+            }
+            for (int i = 0; i < b.length; i++) {
+                b[i] = value;
             }
         }
 
@@ -606,7 +619,7 @@ public strictfp class SFMTRandom {
         }
 
         public String toString() {
-            return String.format("u={%d, %d,  %d, %d}, u64={%s, %s}",
+            return String.format("u={%d, %d, %d, %d}, u64={%s, %s}",
                     u(0) & 0xFFFFFFFFL, u(1) & 0xFFFFFFFFL, u(2) & 0xFFFFFFFFL, u(3) & 0xFFFFFFFFL,
                     u64bi(0), u64bi(1));
         }

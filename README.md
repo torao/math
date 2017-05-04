@@ -14,7 +14,7 @@ For example to use in `build.sbt`.
 ```scala
 resolvers += "HazMat Math Repository" at "https://torao.github.io/math/repo"
 
-libraryDependencies += "at.hazm" % "hazmat-math" % "1.0.+"
+libraryDependencies += "at.hazm" % "hazmat-math" % "1.0.0"
 ```
 
 ## Feature
