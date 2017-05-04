@@ -1,13 +1,31 @@
-# Mathematical Library
+# HazMat Mathematical Library
+
+## Getting Started
+
+| Item             | Spec                                   |
+|:-----------------|:---------------------------------------|
+| Requirements     | Java 8 (to use), Scala 2.12 (to build) |
+| Current Version  | 1.0.0                                  |
+| Repository       | https://torao.github.io/math/repo      |
+| ID               | at.hazm:hazmat-math:1.0.0              |
+
+For example to use in `build.sbt`.
+
+```scala
+resolvers += "HazMat Math Repository" at "https://torao.github.io/math/repo"
+
+libraryDependencies += "at.hazm" % "hazmat-math" % "1.0.+"
+```
 
 ## Feature
 
 ### SFMT (SIMD-oriented Fast Mersenne Twister) 
 
-SFMT is a Linear Feedbacked Shift Register (LFSR) pseudo-random number generator. And
-[SFMTRandom](/torao/math/blob/master/src/main/java/at/hazm/math/SFMTRandom.java) is Java porting of its C implementation.
-See [http://www.math.sci.hiroshima-u.ac.jp/~m-mat/MT/SFMT/index.html](http://www.math.sci.hiroshima-u.ac.jp/~m-mat/MT/SFMT/index.html)
+SFMT is a Linear Feedbacked Shift Register (LFSR) pseudo-random number generator. See
+[http://www.math.sci.hiroshima-u.ac.jp/~m-mat/MT/SFMT/index.html](http://www.math.sci.hiroshima-u.ac.jp/~m-mat/MT/SFMT/index.html)
 for detail.
+
+[SFMTRandom](src/main/java/at/hazm/math/SFMTRandom.java) is a Java porting of its C implementation.
 
 ```java
 import at.hazm.math.SFMTRandom;

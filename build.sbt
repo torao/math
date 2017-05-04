@@ -1,4 +1,4 @@
-name := "math"
+name := "hazmat-math"
 
 organization := "at.hazm"
 

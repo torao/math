@@ -2,11 +2,11 @@
 <project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://maven.apache.org/POM/4.0.0">
     <modelVersion>4.0.0</modelVersion>
     <groupId>at.hazm</groupId>
-    <artifactId>math</artifactId>
+    <artifactId>hazmat-math</artifactId>
     <packaging>jar</packaging>
-    <description>math</description>
+    <description>hazmat-math</description>
     <version>1.0.0</version>
-    <name>math</name>
+    <name>hazmat-math</name>
     <organization>
         <name>at.hazm</name>
     </organization>
