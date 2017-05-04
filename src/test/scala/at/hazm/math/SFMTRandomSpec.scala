@@ -1,56 +1,40 @@
 package at.hazm.math
 
 import org.specs2.Specification
+import org.specs2.specification.core.SpecStructure
 
 class SFMTRandomSpec extends Specification {
-  def is =
+  def is:SpecStructure =
     s2"""
-       |
-       |generate random int and long    $e0
-       |generate 32bit random array     $e1
-       |generate 64bit random array     $e2
-       |integer random to double        $e3
-       |generate same random by next    $e4
-       |init seed by array              $e5
+       |constructor can call                           $e6
+       |generate random int and long                   $e0
+       |generate 32bit random array                    $e1
+       |generate 64bit random array                    $e2
+       |integer random to double                       $e3
+       |generate same random by next                   $e4
+       |init seed by array                             $e5
+       |auto resize and fit buffer in bulk             $e7
       """.stripMargin
 
-  def ex = {
-    val BLOCK_SIZE = 100000
-    val BLOCK_SIZE64 = 50000
-    val COUNT = 1000
+  val param:SFMTParam = SFMTParam.P19937
 
-    val array1 = new Array[SFMTRandom.W128T](BLOCK_SIZE / 4)
-    val array2 = new Array[SFMTRandom.W128T](10000 / 4)
-
-    val array32 = new Array[Int](10000)
-    val array32_2 = new Array[Int](10000)
-
-    val sfmt = new SFMTRandom(SFMTParam.P19937)
-    if(sfmt.get_min_array_size32() > 10000) {
-      printf("array size too small!\n")
-      failure
-    }
-    println(sfmt.getId)
-    println("32 bit generated randoms")
-    println("init_gen_rand__________")
-    /* 32 bit generation */
-    sfmt.setSeed(1234)
-    sfmt.fill_array32(array32)
-    sfmt.fill_array32(array32_2)
-    sfmt.setSeed(1234)
-    for(i <- 0 until 10000) {
-      if(i < 1000) {
-        print(f"${array32(i).toLong & 0xFFFFFFFFL}%10d ")
-        if(i % 5 == 4) {
-          println()
-        }
-      }
-    }
-    success
+  private def e6 = {
+    new SFMTRandom().getId
+    val r1 = new SFMTRandom()
+    val r2 = new SFMTRandom(param, 1234)
+    val r3 = new SFMTRandom(param, 1234, 5678, 9012, 3456, 7890, 1234)
+    val r4 = new SFMTRandom(1234)
+    val r5 = new SFMTRandom(1234, 5678, 9012, 3456, 7890, 1234)
+    r1.setSeed(1234)
+    (0 until 10).map { _ =>
+      val i1 = r1.nextInt()
+      val i2 = r2.nextInt()
+      i1 === i2
+    }.reduceLeft(_ and _)
   }
 
-  def e0 = {
-    val random = new SFMTRandom(SFMTParam.P19937)
+  private def e0 = {
+    val random = new SFMTRandom(param)
     random.setSeed(0)
     random.nextInt()
     random.setSeed(0)
@@ -58,7 +42,7 @@ class SFMTRandomSpec extends Specification {
     success
   }
 
-  def e1 = {
+  private def e1 = {
     Seq(
       0 -> Seq(772581976L, 265233418L, 1048142482L, 1602309670L, 3373935053L,
         3413705399L, 3210284462L, 863469473L, 3245518687L, 498391845L),
@@ -69,15 +53,15 @@ class SFMTRandomSpec extends Specification {
       1234 -> Seq(3440181298L, 1564997079L, 1510669302L, 2930277156L, 1452439940L,
         3796268453L, 423124208L, 2143818589L, 3827219408L, 2987036003L)
     ).flatMap { case (seed, expected) =>
-      val random = new SFMTRandom(SFMTParam.P19937)
-      val actual = new Array[Int](random.get_min_array_size32())
+      val random = new SFMTRandom(param)
+      val actual = new Array[Int](param.SFMT_N32)
       random.setSeed(seed)
-      random.fill_array32(actual)
+      random.newRandomInt(actual)
       expected.zip(actual).zipWithIndex.map { case ((a, b), i) => s"$i:${a.toInt}" === s"$i:$b" }
     }.reduceLeft(_ and _)
   }
 
-  def e2 = {
+  private def e2 = {
     Seq(
       0 -> Seq(BigInt("1139168856888879704"), BigInt("6881867631762694802"),
         BigInt("14661753050257566157"), BigInt("3708573150839639470"),
@@ -100,48 +84,43 @@ class SFMTRandomSpec extends Specification {
         BigInt("10887302133822135185"), BigInt("2342338980101906157"),
         BigInt("5886399791876835913"), BigInt("17157548324798079420"))
     ).flatMap { case (seed, expected) =>
-      val random = new SFMTRandom(SFMTParam.P19937)
-      val actual = new Array[Long](random.get_min_array_size64())
+      val random = new SFMTRandom(param)
+      val actual = new Array[Long](param.SFMT_N64)
       random.setSeed(seed)
-      random.fill_array64(actual)
+      random.newRandomLong(actual)
       expected.zip(actual).zipWithIndex.map { case ((a, b), i) => s"$i:${a.toLong}" === s"$i:$b" }
     }.reduceLeft(_ and _)
   }
 
-  def e3 = {
+  private def e3 = {
     val Epsilon = math.pow(2, 1 - 53)
-    (SFMTRandom.to_real1(Int.MinValue) === 0.0) and
-      (math.abs(SFMTRandom.to_real1(0) - math.abs(Int.MinValue / 0xFFFFFFFFL.toDouble)) must be_<=(Epsilon)) and
-      (SFMTRandom.to_real1(Int.MaxValue) === 1.0) and
-      // ---
-      (SFMTRandom.to_real2(Int.MinValue) === 0.0) and
-      (math.abs(SFMTRandom.to_real2(0) - math.abs(Int.MinValue / 0x100000000L.toDouble)) must be_<=(Epsilon)) and
-      (SFMTRandom.to_real2(Int.MaxValue) must be_<(1.0)) and
-      // ---
-      (SFMTRandom.to_real3(Int.MinValue) must be_>(0.0)) and
-      (math.abs(SFMTRandom.to_real2(0) - math.abs(Int.MinValue / 0x100000000L.toDouble)) must be_<=(Epsilon)) and
-      (SFMTRandom.to_real3(Int.MaxValue) must be_<(1.0))
+    case class Rand(i:Int) extends SFMTRandom {
+      override def nextInt():Int = i
+    }
+    (Rand(Int.MinValue).nextDouble() === 0.0) and
+      (math.abs(Rand(0).nextDouble() - math.abs(Int.MinValue / 0x100000000L.toDouble)) must be_<=(Epsilon)) and
+      (Rand(Int.MaxValue).nextDouble() must be_<(1.0))
   }
 
-  def e4 = {
-    val random1 = new SFMTRandom(SFMTParam.P19937)
-    val random2 = new SFMTRandom(SFMTParam.P19937)
+  private def e4 = {
+    val random1 = new SFMTRandom(param)
+    val random2 = new SFMTRandom(param)
     Seq(Int.MinValue, 0, Int.MaxValue, 1234).flatMap { seed => {
-      val expected = new Array[Int](random1.get_min_array_size32())
+      val expected = new Array[Int](param.SFMT_N32)
       random1.setSeed(seed)
       random2.setSeed(seed)
       (1 to 10).flatMap { _ =>
-        random1.fill_array32(expected)
+        random1.newRandomInt(expected)
         expected.map { e =>
           e === random2.nextInt()
         }
       }
     } ++ {
-      val expected = new Array[Long](random1.get_min_array_size64())
+      val expected = new Array[Long](param.SFMT_N64)
       random1.setSeed(seed)
       random2.setSeed(seed)
       (1 to 10).flatMap { i =>
-        random1.fill_array64(expected)
+        random1.newRandomLong(expected)
         expected.map { e =>
           s"$seed:$i:$e" === s"$seed:$i:${random2.nextLong()}"
         }
@@ -150,7 +129,7 @@ class SFMTRandomSpec extends Specification {
     }.reduceLeft(_ and _)
   }
 
-  def e5 = Seq(
+  private def e5 = Seq(
     Array(0x01234567, 0x89ABCDEF, 0xFEDCBA98, 0x76543210) -> Seq(
       32 -> Seq(BigInt("1160643868"), BigInt("3351191604"),
         BigInt("737920565"), BigInt("1867384258"),
@@ -165,18 +144,32 @@ class SFMTRandomSpec extends Specification {
     )
   ).flatMap { case (seed, tests) =>
     tests.flatMap { case (bit, expected) =>
-      val random = new SFMTRandom(SFMTParam.P19937)
-      random.init_by_array(seed:_*)
-      val actual = if(bit == 32){
-        val actual = new Array[Int](random.get_min_array_size32())
-        random.fill_array32(actual)
+      val random = new SFMTRandom(param)
+      random.setSeed(seed:_*)
+      val actual = if(bit == 32) {
+        val actual = new Array[Int](param.SFMT_N32)
+        random.newRandomInt(actual)
         actual.map(_ & 0xFFFFFFFFL).map(i => BigInt(i))
       } else {
-        val actual = new Array[Long](random.get_min_array_size64())
-        random.fill_array64(actual)
+        val actual = new Array[Long](param.SFMT_N64)
+        random.newRandomLong(actual)
         actual.map(i => BigInt(i))
       }
       expected.zip(actual).map { case (a, b) => a.toLong === b.toLong }
+    }
+  }.reduceLeft(_ and _)
+
+  private def e7 = Seq(0, 10, 100000).flatMap{ len =>
+    {
+      val rand1 = new SFMTRandom(0)
+      val rand2 = new SFMTRandom(0)
+      val actual = rand1.newRandomInt(new Array[Int](len))
+      actual.map{ i => i === rand2.nextInt() }
+    } ++ {
+      val rand1 = new SFMTRandom(0)
+      val rand2 = new SFMTRandom(0)
+      val actual = rand1.newRandomLong(new Array[Long](len))
+      actual.map{ i => i === rand2.nextLong() }
     }
   }.reduceLeft(_ and _)
 

@@ -5,9 +5,44 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 /**
+ * This class is a Java implementation of pseudo-random number generator using <b>SFMT</b> (SIMD-oriented Fast Mersenne
+ * Twister).
+ * <p>SFMT is a Linear Feedbacked Shift Register (LFSR) pseudo-random number generator and improved algorithm of
+ * conventional MT (Mersenne Twister) in speed and equidistributions. Like MT, the SFMT supports extremely long periods
+ * from 2<sup>607</sup>-1 to 2<sup>216091</sup>-1.</p>
+ * <p>NOTE that this implementation doesn't support the native SIMD features such as SEE2 because, same as Standard C
+ * version of original source, this is written pure Java.</p>
+ * <p>
+ * The original SFMT sources are written in C by Makoto Matsumoto and Takuji Nishimura in 2007 and their license is here:
+ * </p>
+ * <blockquote>
+ * <p>Copyright (c) 2006,2007 Mutsuo Saito, Makoto Matsumoto and Hiroshima University. Copyright (c) 2012 Mutsuo Saito,
+ * Makoto Matsumoto, Hiroshima University and The University of Tokyo. All rights reserved.</p>
+ * <p>Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
+ * following conditions are met:</p>
+ * <ul>
+ * <li>Redistributions of source code must retain the above copyright notice, this list of conditions and the following
+ * disclaimer.</li>
+ * <li>Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the
+ * following disclaimer in the documentation and/or other materials provided with the distribution.</li>
+ * <li></li>Neither the names of Hiroshima University, The University of Tokyo nor the names of its contributors may be
+ * used to endorse or promote products derived from this software without specific prior written permission.</li>
+ * </ul>
+ * <p>
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * </p>
+ * <a href="http://www.math.sci.hiroshima-u.ac.jp/~m-mat/MT/SFMT/LICENSE.txt">http://www.math.sci.hiroshima-u.ac.jp/~m-mat/MT/SFMT/LICENSE.txt</a>
+ * </blockquote>
  * derived from 1.5.1
  *
- * @see <a href="http://www.math.sci.hiroshima-u.ac.jp/~m-mat/MT/SFMT/"></a>
+ * @author Takami Torao
+ * @see <a href="http://www.math.sci.hiroshima-u.ac.jp/~m-mat/MT/SFMT/">SFMT</a>
  */
 public strictfp class SFMTRandom {
 
@@ -23,197 +58,132 @@ public strictfp class SFMTRandom {
      */
     private int idx = 0;
 
+    /**
+     * Default contructor uses P19937 and initializes its seed in current timestamp.
+     */
+    public SFMTRandom() {
+        this(SFMTParam.P19937);
+    }
+
+    /**
+     * Construct with specified parameters, and initialize its seed in current timestamp.
+     *
+     * @param param SFMT parameters
+     */
     public SFMTRandom(SFMTParam param) {
         this.param = param;
         this.state = new W128T[param.SFMT_N];
         for (int i = 0; i < this.state.length; i++) {
             this.state[i] = new W128T();
         }
+        long tm = System.currentTimeMillis();
+        setSeed((int) (tm << Integer.SIZE), (int) tm);
     }
 
+    /**
+     * Construct with specified parameters and seed.
+     *
+     * @param param SFMT parameters
+     * @param seed  seed
+     */
     public SFMTRandom(SFMTParam param, int seed) {
         this(param);
         setSeed(seed);
     }
 
-    public SFMTRandom(SFMTParam param, int[] seed) {
+    /**
+     * Construct with specified parameters and seed.
+     *
+     * @param param SFMT parameters
+     * @param seed  seed
+     */
+    public SFMTRandom(SFMTParam param, int... seed) {
         this(param);
-        init_by_array(seed);
+        setSeed(seed);
     }
 
-    private int psfmt32(int i) {
+    /**
+     * Construct with P19937 and specified parameters and seed.
+     *
+     * @param seed seed
+     */
+    public SFMTRandom(int seed) {
+        this(SFMTParam.P19937, seed);
+    }
+
+    /**
+     * Construct with P19937 and specified parameters and seed.
+     *
+     * @param seed seed
+     */
+    public SFMTRandom(int... seed) {
+        this(SFMTParam.P19937, seed);
+    }
+
+    private int getInt(int i) {
         return state[i / (W128T.BUFFER_SIZE / Integer.BYTES)].u(i % (W128T.BUFFER_SIZE / Integer.BYTES));
     }
 
-    private void psfmt32(int i, int value) {
+    private void setInt(int i, int value) {
         state[i / (W128T.BUFFER_SIZE / Integer.BYTES)].u(i % (W128T.BUFFER_SIZE / Integer.BYTES), value);
     }
 
-    private void psfmt32_add(int i, int value) {
+    private void addInt(int i, int value) {
         state[i / (W128T.BUFFER_SIZE / Integer.BYTES)].u_add(i % (W128T.BUFFER_SIZE / Integer.BYTES), value);
     }
 
-    private void psfmt32_xor(int i, int value) {
+    private void xorInt(int i, int value) {
         state[i / (W128T.BUFFER_SIZE / Integer.BYTES)].u_xor(i % (W128T.BUFFER_SIZE / Integer.BYTES), value);
     }
 
-    private long psfmt64(int i) {
+    private long getLong(int i) {
         return state[i / (W128T.BUFFER_SIZE / Long.BYTES)].u64(i % (W128T.BUFFER_SIZE / Long.BYTES));
     }
 
     /**
-     * Generate and returns a 32-bit pseudorandom number.
-     * setSeed or init_by_array must be called before this function.
+     * Generate and return a 32 bit pseudo-random integer.
      *
-     * @return 32-bit pseudorandom number
+     * @return 32 bit pseudo-random integer
      * @apiNote inline static uint32_t sfmt_genrand_uint32(sfmt_t * sfmt)
      */
     public int nextInt() {
         if (idx >= param.SFMT_N32) {
-            gen_rand_all();
+            fillStateToRandom();
             idx = 0;
         }
-        int r = psfmt32(idx);
+        int r = getInt(idx);
         idx++;
         return r;
     }
 
     /**
-     * Generate and return a 64-bit pseudorandom number.
-     * setSeed or init_by_array must be called before this function.
-     * The function gen_rand64 should not be called after gen_rand32,
-     * unless an initialization is again executed.
+     * Generate and return a 64 bit pseudo-random integer.
      *
-     * @return 64-bit pseudorandom number
+     * @return 64 bit pseudo-random integer
      * @apiNote inline static uint64_t sfmt_genrand_uint64(sfmt_t * sfmt)
      */
     public long nextLong() {
-        assert idx % 2 == 0 : idx;
+        if (idx % 2 == 0) {
+            nextInt();
+        }
         if (idx >= param.SFMT_N32) {
-            gen_rand_all();
+            fillStateToRandom();
             idx = 0;
         }
-        long r = psfmt64(idx / 2);
+        long r = getLong(idx / 2);
         idx += 2;
         return r;
     }
 
-/* =================================================
-   The following real versions are due to Isaku Wada
-   ================================================= */
-
     /**
-     * converts a signed 32-bit number to a double on [0,1]-real-interval.
+     * Generate and return a pseudo-random double-precision real in [0,1).
      *
-     * @param v 32-bit signed integer
-     * @return double on [0,1]-real-interval
-     * @apiNote inline static double sfmt_to_real1(uint32_t v)
+     * @return double-precision pseudo-random real
+     * @apiNote inline static double sfmt_to_real2(sfmt_t * sfmt)
      */
-    public static double to_real1(int v) {
-        // divided by 2^32-1
-        return ((long) v - Integer.MIN_VALUE) / (double) 0xFFFFFFFFL;
-    }
-
-    /**
-     * generates a random number on [0,1]-real-interval
-     *
-     * @return double on [0,1]-real-interval
-     * @apiNote inline static double sfmt_genrand_real1(sfmt_t * sfmt)
-     */
-    public double genrand_real1() {
-        return to_real1(nextInt());
-    }
-
-    /**
-     * converts a signed 32-bit integer to a double on [0,1)-real-interval.
-     *
-     * @param v 32-bit signed integer
-     * @return double on [0,1)-real-interval
-     * @apiNote inline static double sfmt_to_real2(uint32_t v)
-     */
-    public static double to_real2(int v) {
-        // divided by 2^32
-        return ((long) v - Integer.MIN_VALUE) / (double) 0x100000000L;
-    }
-
-    /**
-     * generates a random number on [0,1)-real-interval
-     *
-     * @return double on [0,1)-real-interval
-     * @apiNote inline static double sfmt_genrand_real2(sfmt_t * sfmt)
-     */
-    public double to_real2() {
-        return to_real2(nextInt());
-    }
-
-    /**
-     * converts a signed 32-bit integer to a double on (0,1)-real-interval.
-     *
-     * @param v 32-bit signed integer
-     * @return double on (0,1)-real-interval
-     */
-    public static double to_real3(int v) {
-        // divided by 2^32
-        return ((long) v - Integer.MIN_VALUE + 0.5) / (double) 0x100000000L;
-    }
-
-    /**
-     * generates a random number on (0,1)-real-interval
-     *
-     * @return double on (0,1)-real-interval
-     * @apiNote inline static double sfmt_genrand_real3(sfmt_t * sfmt)
-     */
-    public double genrand_real3() {
-        return to_real3(nextInt());
-    }
-
-    /**
-     * converts an unsigned 32-bit integer to double on [0,1)
-     * with 53-bit resolution.
-     *
-     * @param v 32-bit unsigned integer
-     * @return double on [0,1)-real-interval with 53-bit resolution.
-     * @apiNote inline static double sfmt_to_res53(uint64_t v)
-     */
-    public static double to_res53(long v) {
-        return (v >>> 11) * (1.0 / 9007199254740992.0);
-    }
-
-    /**
-     * generates a random number on [0,1) with 53-bit resolution
-     *
-     * @return double on [0,1) with 53-bit resolution
-     * @apiNote inline static double sfmt_genrand_res53(sfmt_t * sfmt)
-     */
-    public double genrand_res53() {
-        return to_res53(nextLong());
-    }
-
-    /* =================================================
-    The following function are added by Saito.
-    ================================================= */
-
-    /**
-     * generates a random number on [0,1) with 53-bit resolution from two
-     * 32 bit integers
-     *
-     * @apiNote inline static double sfmt_to_res53_mix(uint32_t x, uint32_t y)
-     */
-    private static double to_res53_mix(int x, int y) {
-        return to_res53(x | ((long) y << 32));
-    }
-
-    /**
-     * generates a random number on [0,1) with 53-bit resolution
-     * using two 32bit integers.
-     *
-     * @return double on [0,1) with 53-bit resolution
-     * @apiNote inline static double sfmt_genrand_res53_mix(sfmt_t * sfmt)
-     */
-    private double genrand_res53_mix() {
-        int x = nextInt();
-        int y = nextInt();
-        return to_res53_mix(x, y);
+    public double nextDouble() {
+        long value = nextInt();
+        return (value - Integer.MIN_VALUE) / (double) 0x100000000L;
     }
 
     /**
@@ -224,9 +194,9 @@ public strictfp class SFMTRandom {
      * @param b a 128-bit part of the internal state array
      * @param c a 128-bit part of the internal state array
      * @param d a 128-bit part of the internal state array
-     * @apiNote inline static void do_recursion(w128_t *r, w128_t *a, w128_t *b, w128_t *c,
+     * @apiNote inline static void doRecursion(w128_t *r, w128_t *a, w128_t *b, w128_t *c,
      */
-    private void do_recursion(W128T r, W128T a, W128T b, W128T c, W128T d) {
+    private void doRecursion(W128T r, W128T a, W128T b, W128T c, W128T d) {
         W128T x = a.lshift128(param.SFMT_SL2);
         W128T y = c.rshift128(param.SFMT_SR2);
 
@@ -236,8 +206,7 @@ public strictfp class SFMTRandom {
     }
 
     /**
-     * This function simulate a 64-bit index of LITTLE ENDIAN
-     * in BIG ENDIAN machine.
+     * This function simulate a 64-bit index of LITTLE ENDIAN in BIG ENDIAN machine.
      *
      * @apiNote inline static int idxof(int i)
      */
@@ -246,8 +215,7 @@ public strictfp class SFMTRandom {
     }
 
     /**
-     * This function represents a function used in the initialization
-     * by init_by_array
+     * This function represents a function used in the initialization by setSeed.
      *
      * @param x 32-bit integer
      * @return 32-bit integer
@@ -258,8 +226,7 @@ public strictfp class SFMTRandom {
     }
 
     /**
-     * This function represents a function used in the initialization
-     * by init_by_array
+     * This function represents a function used in the initialization by setSeed.
      *
      * @param x 32-bit integer
      * @return 32-bit integer
@@ -272,11 +239,10 @@ public strictfp class SFMTRandom {
     /**
      * This function certificate the period of 2^{MEXP}
      *
-     * @apiNote static void period_certification(sfmt_t * sfmt)
+     * @apiNote static void periodCertification(sfmt_t * sfmt)
      */
-    private void period_certification() {
+    private void periodCertification() {
         int inner = 0;
-        int work;
 
         for (int i = 0; i < 4; i++) {
             inner ^= state[0].u(idxof(i)) & param.SFMT_PARITY(i);
@@ -290,6 +256,7 @@ public strictfp class SFMTRandom {
             return;
         }
         // check NG, and modification
+        int work;
         for (int i = 0; i < 4; i++) {
             work = 1;
             for (int j = 0; j < 32; j++) {
@@ -300,42 +267,11 @@ public strictfp class SFMTRandom {
                 work = work << 1;
             }
         }
-        /*
-        uint32_t inner = 0;
-        int i, j;
-        uint32_t work;
-        uint32_t *psfmt32 = &sfmt->state[0].u[0];
-    const uint32_t parity[4] = {SFMT_PARITY1, SFMT_PARITY2,
-                SFMT_PARITY3, SFMT_PARITY4};
-
-        for (i = 0; i < 4; i++) {
-            inner ^= psfmt32[idxof(i)] & parity[i];
-        }
-        for (i = 16; i > 0; i >>= 1) {
-            inner ^= inner >> i;
-        }
-        inner &= 1;
-    // check OK
-        if (inner == 1) {
-            return;
-        }
-    // check NG, and modification
-        for (i = 0; i < 4; i++) {
-            work = 1;
-            for (j = 0; j < 32; j++) {
-                if ((work & parity[i]) != 0) {
-                    psfmt32[idxof(i)] ^= work;
-                    return;
-                }
-                work = work << 1;
-            }
-        }
-        */
     }
 
     /**
-     * Return the identification string. The string shows the word size, the Mersenne exponent, and all parameters of
-     * this generator.
+     * Return the parameter identification string used by this instance. The string shows the word size, the Mersenne
+     * exponent, and all parameters of this generator.
      *
      * @return {@link SFMTParam#SFMT_IDSTR}
      * @apiNote const char *sfmt_get_idstring(sfmt_t * sfmt)
@@ -344,177 +280,130 @@ public strictfp class SFMTRandom {
         return param.SFMT_IDSTR;
     }
 
-
     /**
-     * Return the minimum size of array used for {@link #fill_array32(int[])}.
-     *
-     * @return minimum size of array used for fill_array32().
-     * @apiNote int sfmt_get_min_array_size32(sfmt_t * sfmt)
-     */
-    public int get_min_array_size32() {
-        return param.SFMT_N32;
-    }
-
-    /**
-     * Return the minimum size of array used for {@link #fill_array64(long[])}.
-     *
-     * @return minimum size of array used for fill_array64().
-     * @apiNote int sfmt_get_min_array_size64(sfmt_t * sfmt)
-     */
-    public int get_min_array_size64() {
-        return param.SFMT_N64;
-    }
-
-    /**
-     * This function fills the internal state array with pseudorandom
-     * integers.
+     * This function fills the internal state array with pseudo-random integers.
      *
      * @apiNote void sfmt_gen_rand_all(sfmt_t * sfmt)
      */
-    private void gen_rand_all() {
+    private void fillStateToRandom() {
         W128T r1 = state[param.SFMT_N - 2];
         W128T r2 = state[param.SFMT_N - 1];
 
         int i = 0;
         for (; i < param.SFMT_N - param.SFMT_POS1; i++) {
-            do_recursion(state[i], state[i], state[i + param.SFMT_POS1], r1, r2);
+            doRecursion(state[i], state[i], state[i + param.SFMT_POS1], r1, r2);
             r1 = r2;
             r2 = state[i];
         }
         for (; i < param.SFMT_N; i++) {
-            do_recursion(state[i], state[i], state[i + param.SFMT_POS1 - param.SFMT_N], r1, r2);
+            doRecursion(state[i], state[i], state[i + param.SFMT_POS1 - param.SFMT_N], r1, r2);
             r1 = r2;
             r2 = state[i];
         }
-        /*
-        int i;
-        w128_t *r1, *r2;
-
-        r1 = &sfmt->state[SFMT_N - 2];
-        r2 = &sfmt->state[SFMT_N - 1];
-        for (i = 0; i < SFMT_N - SFMT_POS1; i++) {
-            do_recursion(&sfmt->state[i], &sfmt->state[i],
-                     &sfmt->state[i + SFMT_POS1], r1, r2);
-            r1 = r2;
-            r2 = &sfmt->state[i];
-        }
-        for (; i < SFMT_N; i++) {
-            do_recursion(&sfmt->state[i], &sfmt->state[i],
-                     &sfmt->state[i + SFMT_POS1 - SFMT_N], r1, r2);
-            r1 = r2;
-            r2 = &sfmt->state[i];
-        }
-        */
     }
 
     /**
-     * This function generates pseudorandom 32-bit integers in the
-     * specified array[] by one call. The number of pseudorandom integers
-     * is specified by the argument size, which must be at least 624 and a
-     * multiple of four.  The generation by this function is much faster
-     * than the following gen_rand function.
+     * Generate bulk 32bit pseudo-random integers in the specified return buffer {@code array[]} by one call. NOTE that
+     * this function cannot use after calling {@link #nextInt()} or {@link #nextLong()} function without initialization.
      * <p>
-     * For initialization, setSeed or init_by_array must be called
-     * before the first call of this function. This function can not be
-     * used after calling gen_rand function, without initialization.
+     * It is recommended that the length of array is <u>at least {@link SFMTParam#SFMT_N32}</u> and <u>a multiple of
+     * four</u> for the best performance.
      *
-     * @param array an array where pseudorandom 32-bit integers are filled
-     *              by this function.  The pointer to the array must be \b "aligned"
-     *              (namely, must be a multiple of 16) in the SIMD version, since it
-     *              refers to the address of a 128-bit integer.  In the standard C
-     *              version, the pointer is arbitrary.
-     * @param size  the number of 32-bit pseudorandom integers to be
-     *              generated.  size must be a multiple of 4, and greater than or equal
-     *              to (MEXP / 128 + 1) * 4.
-     * @note \b memalign or \b posix_memalign is available to get aligned
-     * memory. Mac OSX doesn't have these functions, but \b malloc of OSX
-     * returns the pointer to the aligned memory block.
+     * @param array a return buffer where pseudo-random 32bit integers are filled.
+     * @return the specified array
+     * @throws IllegalStateException in case this function is used after calling nextInt() or nextLong()
      * @apiNote void sfmt_fill_array32(sfmt_t * sfmt, uint32_t *array, int size)
      */
-    public void fill_array32(int[] array) {
-        assert (idx == param.SFMT_N32);
-        assert (array.length % 4 == 0);
-        assert (array.length >= param.SFMT_N32);
+    public int[] newRandomInt(int[] array) throws IllegalStateException, IllegalArgumentException {
+        if (idx != param.SFMT_N32) {
+            throw new IllegalStateException("newRandomInt() cannot use after calling nextInt() or nextLong()");
+        }
 
-        W128T[] temp = new W128T[array.length / 4];
+        int len;
+        if (array.length < param.SFMT_N32) {
+            len = param.SFMT_N32;
+        } else {
+            len = array.length;
+        }
+        if (len % 4 != 0) {
+            len += 4 - (len % 4);
+        }
+
+        W128T[] temp = new W128T[len / 4];
         for (int i = 0; i < temp.length; i++) {
             temp[i] = new W128T();
         }
-        gen_rand_array(temp);
-        for (int i = 0; i < temp.length; i++) {
-            array[i * 4] = temp[i].u(0);
-            array[i * 4 + 1] = temp[i].u(1);
-            array[i * 4 + 2] = temp[i].u(2);
-            array[i * 4 + 3] = temp[i].u(3);
+        newRandomW128T(temp);
+        for (int i = 0; i < array.length; i++) {
+            array[i] = temp[i / 4].u(i % 4);
         }
         idx = param.SFMT_N32;
+        return array;
     }
 
 
     /**
-     * This function generates pseudorandom 64-bit integers in the
-     * specified array[] by one call. The number of pseudorandom integers
-     * is specified by the argument size, which must be at least 312 and a
-     * multiple of two.  The generation by this function is much faster
-     * than the following gen_rand function.
+     * Generate bulk 64bit pseudo-random integers in the specified return buffer {@code array[]} by one call. NOTE that
+     * this function cannot use after calling {@link #nextInt()} or {@link #nextLong()} function without initialization.
      * <p>
-     * For initialization, setSeed or init_by_array must be called
-     * before the first call of this function. This function can not be
-     * used after calling gen_rand function, without initialization.
+     * It is recommended that the length of array is <u>at least {@link SFMTParam#SFMT_N64}</u> and <u>a multiple of
+     * two</u> for the best performance.
      *
-     * @param array an array where pseudorandom 64-bit integers are filled
-     *              by this function.  The pointer to the array must be "aligned"
-     *              (namely, must be a multiple of 16) in the SIMD version, since it
-     *              refers to the address of a 128-bit integer.  In the standard C
-     *              version, the pointer is arbitrary.
-     * @param size  the number of 64-bit pseudorandom integers to be
-     *              generated.  size must be a multiple of 2, and greater than or equal
-     *              to (MEXP / 128 + 1) * 2
-     * @note \b memalign or \b posix_memalign is available to get aligned
-     * memory. Mac OSX doesn't have these functions, but \b malloc of OSX
-     * returns the pointer to the aligned memory block.
+     * @param array a return buffer where presudo-random 64bit integers are filled.
+     * @return the specified array
+     * @throws IllegalStateException in case this function is used after calling nextInt() or nextLong()
      * @apiNote void sfmt_fill_array64(sfmt_t * sfmt, uint64_t *array, int size)
      */
-    public void fill_array64(long[] array) {
-        assert (idx == param.SFMT_N32);
-        assert (array.length % 2 == 0);
-        assert (array.length >= param.SFMT_N64);
+    public long[] newRandomLong(long[] array) {
+        if (idx != param.SFMT_N32) {
+            throw new IllegalStateException("newRandomInt() cannot use after calling nextInt() or nextLong()");
+        }
 
-        W128T[] temp = new W128T[array.length / 2];
+        int len;
+        if (array.length < param.SFMT_N64) {
+            len = param.SFMT_N64;
+        } else {
+            len = array.length;
+        }
+        if (len % 2 != 0) {
+            len += 2 - (len % 2);
+        }
+
+        W128T[] temp = new W128T[len / 2];
         for (int i = 0; i < temp.length; i++) {
             temp[i] = new W128T();
         }
-        gen_rand_array(temp);
-        for (int i = 0; i < temp.length; i++) {
-            array[i * 2] = temp[i].u64(0);
-            array[i * 2 + 1] = temp[i].u64(1);
+        newRandomW128T(temp);
+        for (int i = 0; i < array.length; i++) {
+            array[i] = temp[i / 2].u64(i % 2);
         }
         idx = param.SFMT_N32;
+        return array;
     }
 
     /**
-     * This function fills the user-specified array with pseudorandom integers.
+     * This function fills the user-specified array with pseudo-random integers.
      *
-     * @param array an 128-bit array to be filled by pseudorandom numbers.
-     * @apiNote inline static void gen_rand_array(sfmt_t * sfmt, w128_t *array, int size)
+     * @param array an 128bit array to be filled by pseudo-random numbers.
+     * @apiNote inline static void newRandomW128T(sfmt_t * sfmt, w128_t *array, int size)
      */
-    private void gen_rand_array(W128T[] array) {
+    private void newRandomW128T(W128T[] array) {
         W128T r1 = state[param.SFMT_N - 2];
         W128T r2 = state[param.SFMT_N - 1];
 
         int i = 0;
         for (; i < param.SFMT_N - param.SFMT_POS1; i++) {
-            do_recursion(array[i], state[i], state[i + param.SFMT_POS1], r1, r2);
+            doRecursion(array[i], state[i], state[i + param.SFMT_POS1], r1, r2);
             r1 = r2;
             r2 = array[i];
         }
         for (; i < param.SFMT_N; i++) {
-            do_recursion(array[i], state[i], array[i + param.SFMT_POS1 - param.SFMT_N], r1, r2);
+            doRecursion(array[i], state[i], array[i + param.SFMT_POS1 - param.SFMT_N], r1, r2);
             r1 = r2;
             r2 = array[i];
         }
         for (; i < array.length - param.SFMT_N; i++) {
-            do_recursion(array[i], array[i - param.SFMT_N], array[i + param.SFMT_POS1 - param.SFMT_N], r1, r2);
+            doRecursion(array[i], array[i - param.SFMT_N], array[i + param.SFMT_POS1 - param.SFMT_N], r1, r2);
             r1 = r2;
             r2 = array[i];
         }
@@ -523,7 +412,7 @@ public strictfp class SFMTRandom {
             state[j] = array[j + array.length - param.SFMT_N];
         }
         for (; i < array.length; i++, j++) {
-            do_recursion(array[i], array[i - param.SFMT_N], array[i + param.SFMT_POS1 - param.SFMT_N], r1, r2);
+            doRecursion(array[i], array[i - param.SFMT_N], array[i + param.SFMT_POS1 - param.SFMT_N], r1, r2);
             r1 = r2;
             r2 = array[i];
             state[j] = array[i];
@@ -532,8 +421,7 @@ public strictfp class SFMTRandom {
 
 
     /**
-     * This function initializes the internal state array with a 32-bit
-     * integer seed.
+     * Initialize internal random state with specified 32bit integer seed.
      *
      * @param seed a 32-bit integer used as the seed.
      * @apiNote void sfmt_init_gen_rand(sfmt_t * sfmt, uint32_t seed)
@@ -541,27 +429,22 @@ public strictfp class SFMTRandom {
     public void setSeed(int seed) {
         state[0].u(idxof(0), seed);
         for (int i = 1; i < param.SFMT_N32; i++) {
-            psfmt32(i, 1812433253 * (psfmt32(idxof(i - 1)) ^ (psfmt32(idxof(i - 1)) >>> 30)) + i);
+            setInt(i, 1812433253 * (getInt(idxof(i - 1)) ^ (getInt(idxof(i - 1)) >>> 30)) + i);
         }
         idx = param.SFMT_N32;
-        period_certification();
+        periodCertification();
     }
 
     /**
-     * This function initializes the internal state array,
-     * with an array of 32-bit integers used as the seeds
+     * Initialize internal random state with speicified 32bit integer array seed.
      *
-     * @param init_key   the array of 32-bit integers, used as a seed.
-     * @param key_length the length of init_key.
+     * @param seed an array of 32bit integers as seed
      * @apiNote void sfmt_init_by_array(sfmt_t * sfmt, uint32_t *init_key, int key_length)
      */
-    public void init_by_array(int... init_key) {
-        int count;
-        int r;
-        int lag;
-        int mid;
+    public void setSeed(int... seed) {
         int size = param.SFMT_N * 4;
 
+        int lag;
         if (size >= 623) {
             lag = 11;
         } else if (size >= 68) {
@@ -571,61 +454,59 @@ public strictfp class SFMTRandom {
         } else {
             lag = 3;
         }
-        mid = (size - lag) / 2;
 
-//        struct SFMT_T {
-//            w128_t state[SFMT_N];
-//            int idx;
-//        };
+        int mid = (size - lag) / 2;
+
         // memset(sfmt, 0x8b, sizeof(sfmt_t));
         for (W128T aState : state) {
             aState.fill((byte) 0x8b);
         }
 
-        if (init_key.length + 1 > param.SFMT_N32) {
-            count = init_key.length + 1;
+        int count;
+        if (seed.length + 1 > param.SFMT_N32) {
+            count = seed.length + 1;
         } else {
             count = param.SFMT_N32;
         }
-        r = func1(psfmt32(idxof(0)) ^ psfmt32(idxof(mid)) ^ psfmt32(idxof(param.SFMT_N32 - 1)));
-        psfmt32_add(idxof(mid), r);
-        r += init_key.length;
-        psfmt32_add(idxof(mid + lag), r);
-        psfmt32(idxof(0), r);
+        int r = func1(getInt(idxof(0)) ^ getInt(idxof(mid)) ^ getInt(idxof(param.SFMT_N32 - 1)));
+        addInt(idxof(mid), r);
+        r += seed.length;
+        addInt(idxof(mid + lag), r);
+        setInt(idxof(0), r);
 
         int i = 1;
         int j = 0;
         count--;
-        for (; (j < count) && (j < init_key.length); j++) {
-            r = func1(psfmt32(idxof(i)) ^ psfmt32(idxof((i + mid) % param.SFMT_N32))
-                    ^ psfmt32(idxof((i + param.SFMT_N32 - 1) % param.SFMT_N32)));
-            psfmt32_add(idxof((i + mid) % param.SFMT_N32), r);
-            r += init_key[j] + i;
-            psfmt32_add(idxof((i + mid + lag) % param.SFMT_N32), r);
-            psfmt32(idxof(i), r);
+        for (; (j < count) && (j < seed.length); j++) {
+            r = func1(getInt(idxof(i)) ^ getInt(idxof((i + mid) % param.SFMT_N32))
+                    ^ getInt(idxof((i + param.SFMT_N32 - 1) % param.SFMT_N32)));
+            addInt(idxof((i + mid) % param.SFMT_N32), r);
+            r += seed[j] + i;
+            addInt(idxof((i + mid + lag) % param.SFMT_N32), r);
+            setInt(idxof(i), r);
             i = (i + 1) % param.SFMT_N32;
         }
         for (; j < count; j++) {
-            r = func1(psfmt32(idxof(i)) ^ psfmt32(idxof((i + mid) % param.SFMT_N32))
-                    ^ psfmt32(idxof((i + param.SFMT_N32 - 1) % param.SFMT_N32)));
-            psfmt32_add(idxof((i + mid) % param.SFMT_N32), r);
+            r = func1(getInt(idxof(i)) ^ getInt(idxof((i + mid) % param.SFMT_N32))
+                    ^ getInt(idxof((i + param.SFMT_N32 - 1) % param.SFMT_N32)));
+            addInt(idxof((i + mid) % param.SFMT_N32), r);
             r += i;
-            psfmt32_add(idxof((i + mid + lag) % param.SFMT_N32), r);
-            psfmt32(idxof(i), r);
+            addInt(idxof((i + mid + lag) % param.SFMT_N32), r);
+            setInt(idxof(i), r);
             i = (i + 1) % param.SFMT_N32;
         }
         for (j = 0; j < param.SFMT_N32; j++) {
-            r = func2(psfmt32(idxof(i)) + psfmt32(idxof((i + mid) % param.SFMT_N32))
-                    + psfmt32(idxof((i + param.SFMT_N32 - 1) % param.SFMT_N32)));
-            psfmt32_xor(idxof((i + mid) % param.SFMT_N32), r);
+            r = func2(getInt(idxof(i)) + getInt(idxof((i + mid) % param.SFMT_N32))
+                    + getInt(idxof((i + param.SFMT_N32 - 1) % param.SFMT_N32)));
+            xorInt(idxof((i + mid) % param.SFMT_N32), r);
             r -= i;
-            psfmt32_xor(idxof((i + mid + lag) % param.SFMT_N32), r);
-            psfmt32(idxof(i), r);
+            xorInt(idxof((i + mid + lag) % param.SFMT_N32), r);
+            setInt(idxof(i), r);
             i = (i + 1) % param.SFMT_N32;
         }
 
         idx = param.SFMT_N32;
-        period_certification();
+        periodCertification();
     }
 
 
@@ -683,14 +564,13 @@ public strictfp class SFMTRandom {
          * @apiNote inline static void lshift128(w128_t *out, w128_t const *in, int shift) {
          */
         W128T lshift128(int shift) {
-            long th, tl, oh, ol;
             W128T out = new W128T();
 
-            th = ((this.u(3) & 0xFFFFFFFFL) << 32) | (this.u(2) & 0xFFFFFFFFL);
-            tl = ((this.u(1) & 0xFFFFFFFFL) << 32) | (this.u(0) & 0xFFFFFFFFL);
+            long th = ((this.u(3) & 0xFFFFFFFFL) << 32) | (this.u(2) & 0xFFFFFFFFL);
+            long tl = ((this.u(1) & 0xFFFFFFFFL) << 32) | (this.u(0) & 0xFFFFFFFFL);
 
-            oh = th << (shift * 8);
-            ol = tl << (shift * 8);
+            long oh = th << (shift * 8);
+            long ol = tl << (shift * 8);
             oh |= tl >>> (64 - shift * 8);
             out.u(1, (int) (ol >>> 32));
             out.u(0, (int) ol);
